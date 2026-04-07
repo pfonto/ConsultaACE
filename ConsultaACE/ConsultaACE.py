@@ -8,27 +8,21 @@ from rxconfig import config
 class State(rx.State):
     """The app state."""
 
+    @rx.event
+    def consultar(self) -> None:
+        """Manejador para la consulta."""
+        print("Consultar")
+
 
 def index() -> rx.Component:
     # Welcome Page (Index)
     return rx.container(
-        rx.color_mode.button(position="top-right"),
-        rx.vstack(
-            rx.heading("Welcome to Reflex!", size="9"),
-            rx.text(
-                "Get started by editing ",
-                rx.code(f"{config.app_name}/{config.app_name}.py"),
-                size="5",
-            ),
-            rx.link(
-                rx.button("Check out our docs!"),
-                href="https://reflex.dev/docs/getting-started/introduction/",
-                is_external=True,
-            ),
-            spacing="5",
-            justify="center",
-            min_height="85vh",
-        ),
+        rx.hstack(
+            rx.input(placeholder="Interface", name="interface", required=True),
+            rx.input(placeholder="Fecha Desde", name="fecha_desde"),
+            rx.input(placeholder="Fecha Hasta", name="fecha_hasta"),
+            rx.button("Consultar", on_click=State.consultar)
+        )
     )
 
 
