@@ -14,20 +14,13 @@ uv sync                    # install dependencies from uv.lock
 
 - `ConsultaACE/ConsultaACE.py` — real app entrypoint (Reflex State + pages). `main.py` at root is a stub and not the entrypoint.
 - `rxconfig.py` — Reflex config (app name `ConsultaACE`, plugins: TailwindV4, Sitemap).
-- `ConsultaACE/db.py` — SQLAlchemy engine + Oracle connection via Pydantic Settings (`ORACLE_*` env vars).
-- `ConsultaACE/models.py` — SQLAlchemy models mirroring `database_schema.md` tables.
 - `.web/` — generated build artifacts (gitignored, auto-created by `reflex run`).
 - `.states/` — Reflex state pickle persistence (gitignored).
-
-## OpenCode config (`opencode.json`)
-
-- `database_schema.md` and `STYLE_GUIDE.md` are loaded as instructions — always present, do not duplicate.
-- `default_agent: "plan"` — agent starts in plan (read-only) mode by default.
-- `bash: "ask"` permission — agent must ask before running commands.
 
 ## Gotchas
 
 - **No tests, no linter, no formatter, no CI** configured. Committing changes is up to the developer.
-- **Oracle credentials**: Dev defaults in `ConsultaACE/db.py:9-11`. Override via `ORACLE_USER`, `ORACLE_PASSWORD`, `ORACLE_DSN` env vars. `.env` is gitignored — real credentials go there.
+- **Hardcoded Oracle credentials** live in `ConsultaACE/ConsultaACE.py:19-22`. Be aware when editing — do not commit real credentials.
 - **`main.py` is unused** — the app runs entirely through Reflex's CLI.
+- README is empty; no additional documentation exists.
 - `uv` is the only package manager available (no pip, no poetry).
