@@ -1,0 +1,13 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "database_schema.md",
+    "STYLE_GUIDE.md"
+  ],
+  "default_agent": "plan",
+  "permission": {
+    "bash": "ask",
+    "edit": "allow",
+    "external_directory": "ask"
+  },
+}
