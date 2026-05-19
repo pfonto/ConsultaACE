@@ -9,6 +9,12 @@ from typing import Any
 class State(rx.State):
     opciones_app: list[str] = []
     app_seleccionada: str = ""
+    opciones_dato1: list[str] = []
+    opciones_dato2: list[str] = []
+    opciones_dato3: list[str] = []
+    dato1_seleccionado: str = ""
+    dato2_seleccionado: str = ""
+    dato3_seleccionado: str = ""
     fecha_desde: str = ""
     fecha_hasta: str = ""
     error_fecha: str = ""
@@ -22,6 +28,7 @@ class State(rx.State):
     mostrar_detalles_modal: bool = False
     evento_seleccionado_id: int = 0
     total_eventos: int = 0
+    columnas_dinamicas: list[str] = []
 
     @rx.event
     def obtener_aplicaciones(self):
@@ -41,6 +48,72 @@ class State(rx.State):
         self.app_desc_dato1 = ""
         self.app_desc_dato2 = ""
         self.app_desc_dato3 = ""
+        self.opciones_dato1 = []
+        self.opciones_dato2 = []
+        self.opciones_dato3 = []
+        self.dato1_seleccionado = ""
+        self.dato2_seleccionado = ""
+        self.dato3_seleccionado = ""
+        self.columnas_dinamicas = []
+
+        if not valor:
+            return
+
+        db = SessionLocal()
+        try:
+            app_row = db.execute(
+                select(Aplicacion.IdApp, Aplicacion.DescDato1, Aplicacion.DescDato2, Aplicacion.DescDato3)
+                .where(Aplicacion.App == valor)
+            ).first()
+
+            if app_row:
+                self.app_desc_dato1 = app_row.DescDato1 or ""
+                self.app_desc_dato2 = app_row.DescDato2 or ""
+                self.app_desc_dato3 = app_row.DescDato3 or ""
+
+                d1 = db.execute(
+                    select(Evento.Dato1).distinct()
+                    .where(Evento.IdApp == app_row.IdApp)
+                    .where(Evento.Dato1.isnot(None))
+                    .order_by(Evento.Dato1)
+                ).scalars().all()
+                self.opciones_dato1 = list(d1)
+
+                d2 = db.execute(
+                    select(Evento.Dato2).distinct()
+                    .where(Evento.IdApp == app_row.IdApp)
+                    .where(Evento.Dato2.isnot(None))
+                    .order_by(Evento.Dato2)
+                ).scalars().all()
+                self.opciones_dato2 = list(d2)
+
+                d3 = db.execute(
+                    select(Evento.Dato3).distinct()
+                    .where(Evento.IdApp == app_row.IdApp)
+                    .where(Evento.Dato3.isnot(None))
+                    .order_by(Evento.Dato3)
+                ).scalars().all()
+                self.opciones_dato3 = list(d3)
+
+                if valor == "Financieras":
+                    self.columnas_dinamicas = ["CantidadRegistros", "Importe", "MontoACobrar"]
+
+        except Exception as e:
+            print(f"Error al cargar datos de la interface: {e}")
+        finally:
+            db.close()
+
+    @rx.event
+    def asignar_dato1(self, valor: str):
+        self.dato1_seleccionado = valor
+
+    @rx.event
+    def asignar_dato2(self, valor: str):
+        self.dato2_seleccionado = valor
+
+    @rx.event
+    def asignar_dato3(self, valor: str):
+        self.dato3_seleccionado = valor
 
     @rx.event
     def actualizar_fecha(self, nombre: str, valor: str):
@@ -60,9 +133,12 @@ class State(rx.State):
 
     @rx.event
     def consultar(self) -> None:
-        self.cargar_eventos(self.app_seleccionada, self.fecha_desde, self.fecha_hasta)
+        self.cargar_eventos(
+            self.app_seleccionada, self.fecha_desde, self.fecha_hasta,
+            self.dato1_seleccionado, self.dato2_seleccionado, self.dato3_seleccionado,
+        )
 
-    def cargar_eventos(self, app: str, desde: str, hasta: str):
+    def cargar_eventos(self, app: str, desde: str, hasta: str, dato1: str = "", dato2: str = "", dato3: str = ""):
         db = SessionLocal()
         try:
             stmt = (
@@ -91,6 +167,12 @@ class State(rx.State):
             if hasta:
                 hasta_dt = datetime.fromisoformat(hasta) + timedelta(days=1)
                 stmt = stmt.where(Evento.FechaHora < hasta_dt)
+            if dato1:
+                stmt = stmt.where(Evento.Dato1 == dato1)
+            if dato2:
+                stmt = stmt.where(Evento.Dato2 == dato2)
+            if dato3:
+                stmt = stmt.where(Evento.Dato3 == dato3)
 
             rows = db.execute(stmt).all()
             self.eventos = [
@@ -114,10 +196,32 @@ class State(rx.State):
                 self.app_desc_dato1 = self.eventos[0]["desc_dato1"]
                 self.app_desc_dato2 = self.eventos[0]["desc_dato2"]
                 self.app_desc_dato3 = self.eventos[0]["desc_dato3"]
-            else:
-                self.app_desc_dato1 = ""
-                self.app_desc_dato2 = ""
-                self.app_desc_dato3 = ""
+
+            ids = [r[0] for r in rows]
+            detail_keys = ["Resultado"]
+            for col_name in self.columnas_dinamicas:
+                detail_keys.append(col_name)
+
+            if ids:
+                detail_rows = db.execute(
+                    select(EventoDetalle.IdEvento, EventoDetalle.DescDato, EventoDetalle.Dato)
+                    .where(EventoDetalle.IdEvento.in_(ids))
+                    .where(EventoDetalle.DescDato.in_(detail_keys))
+                ).all()
+
+                det_map: dict[int, dict[str, str]] = {}
+                for dr in detail_rows:
+                    det_map.setdefault(dr[0], {})[dr[1]] = dr[2] or ""
+
+                for ev in self.eventos:
+                    det = det_map.get(ev["id_evento"], {})
+                    ev["resultado"] = det.get("Resultado", "")
+                    if "CantidadRegistros" in self.columnas_dinamicas:
+                        ev["cantidad_registros"] = det.get("CantidadRegistros", "")
+                    if "Importe" in self.columnas_dinamicas:
+                        ev["importe"] = det.get("Importe", "")
+                    if "MontoACobrar" in self.columnas_dinamicas:
+                        ev["monto_a_cobrar"] = det.get("MontoACobrar", "")
 
         except Exception as e:
             print(f"Error al consultar eventos: {e}")
@@ -161,6 +265,19 @@ def render_fila(evento: dict[str, Any]) -> rx.Component:
         rx.table.cell(evento["dato1"]),
         rx.table.cell(evento["dato2"]),
         rx.table.cell(evento["dato3"]),
+        rx.table.cell(evento.get("resultado", "")),
+        rx.cond(
+            State.columnas_dinamicas.contains("CantidadRegistros"),
+            rx.table.cell(evento.get("cantidad_registros", "")),
+        ),
+        rx.cond(
+            State.columnas_dinamicas.contains("Importe"),
+            rx.table.cell(evento.get("importe", "")),
+        ),
+        rx.cond(
+            State.columnas_dinamicas.contains("MontoACobrar"),
+            rx.table.cell(evento.get("monto_a_cobrar", "")),
+        ),
         rx.table.cell(
             rx.button(
                 "Detalles",
@@ -190,6 +307,19 @@ def tabla_eventos() -> rx.Component:
                         rx.table.column_header_cell(
                             rx.cond(State.app_desc_dato3 != "", State.app_desc_dato3, "Dato3")
                         ),
+                        rx.table.column_header_cell("Resultado"),
+                        rx.cond(
+                            State.columnas_dinamicas.contains("CantidadRegistros"),
+                            rx.table.column_header_cell("CantidadRegistros"),
+                        ),
+                        rx.cond(
+                            State.columnas_dinamicas.contains("Importe"),
+                            rx.table.column_header_cell("Importe"),
+                        ),
+                        rx.cond(
+                            State.columnas_dinamicas.contains("MontoACobrar"),
+                            rx.table.column_header_cell("MontoACobrar"),
+                        ),
                         rx.table.column_header_cell("Detalles"),
                     ),
                     style={"position": "sticky", "top": 0, "z_index": 10, "background_color": "var(--gray-1)"},
@@ -201,7 +331,7 @@ def tabla_eventos() -> rx.Component:
                 size="2",
                 width="100%",
             ),
-            width="100%",
+            width="120%", # especifica el ancho del contenedor para permitir el scroll horizontal
             overflow_x="auto",
             overflow_y="auto",
             max_height="600px",
@@ -249,35 +379,84 @@ def dialog_detalles() -> rx.Component:
 
 def index() -> rx.Component:
     return rx.container(
-        rx.hstack(
-            rx.select(
-                State.opciones_app,
-                placeholder="Seleccione Interface",
-                on_change=State.asignar_seleccion,
-                required=True,
+        rx.vstack(
+            rx.heading(
+                "Consulta de Interfaces de ACE",
+                size="7",
+                text_align="center",
+                width="100%",
             ),
-            rx.input(
-                type="date",
-                name="fecha_desde",
-                value=State.fecha_desde,
-                max=State.hoy,
-                on_change=lambda e: State.actualizar_fecha("fecha_desde", e),
-                required=True,
+            rx.hstack(
+                rx.vstack(
+                    rx.hstack(
+                        rx.select(
+                            State.opciones_app,
+                            placeholder="Seleccione Interface",
+                            on_change=State.asignar_seleccion,
+                            required=True,
+                        ),
+                        rx.input(
+                            type="date",
+                            name="fecha_desde",
+                            value=State.fecha_desde,
+                            max=State.hoy,
+                            on_change=lambda e: State.actualizar_fecha("fecha_desde", e),
+                            required=True,
+                        ),
+                        rx.input(
+                            type="date",
+                            name="fecha_hasta",
+                            value=State.fecha_hasta,
+                            min=State.fecha_desde,
+                            max=State.hoy,
+                            on_change=lambda e: State.actualizar_fecha("fecha_hasta", e),
+                            required=True,
+                        ),
+                        width="100%",
+                        spacing="3",
+                    ),
+                    rx.hstack(
+                        rx.select(
+                            State.opciones_dato1,
+                            placeholder=State.app_desc_dato1,
+                            value=State.dato1_seleccionado,
+                            disabled=State.app_seleccionada == "",
+                            on_change=State.asignar_dato1,
+                        ),
+                        rx.select(
+                            State.opciones_dato2,
+                            placeholder=State.app_desc_dato2,
+                            value=State.dato2_seleccionado,
+                            disabled=State.app_seleccionada == "",
+                            on_change=State.asignar_dato2,
+                        ),
+                        rx.select(
+                            State.opciones_dato3,
+                            placeholder=State.app_desc_dato3,
+                            value=State.dato3_seleccionado,
+                            disabled=State.app_seleccionada == "",
+                            on_change=State.asignar_dato3,
+                        ),
+                        width="100%",
+                        spacing="3",
+                        # centrar los selects
+                        justify="center",
+                    ),
+                ),
+                rx.vstack(
+                    rx.spacer(),
+                    rx.button(
+                        "Consultar",
+                        on_click=State.consultar,
+                        disabled=(State.error_fecha != "") | (State.fecha_desde == "") | (State.fecha_hasta == "") | (State.app_seleccionada == ""),
+                    ),
+                    spacing="3",
+                    width="100%",
+                ),
             ),
-            rx.input(
-                type="date",
-                name="fecha_hasta",
-                value=State.fecha_hasta,
-                min=State.fecha_desde,
-                max=State.hoy,
-                on_change=lambda e: State.actualizar_fecha("fecha_hasta", e),
-                required=True,
-            ),
-            rx.button(
-                "Consultar",
-                on_click=State.consultar,
-                disabled=(State.error_fecha != "") | (State.fecha_desde == "") | (State.fecha_hasta == ""),
-            ),
+            spacing="3",
+            width="100%",
+            justify="center",
         ),
         rx.cond(
             State.error_fecha != "",
