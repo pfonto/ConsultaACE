@@ -21,6 +21,29 @@ uv sync                    # install dependencies from uv.lock
 - `.web/` — generated build artifacts (gitignored, auto-created by `reflex run`).
 - `.states/` — Reflex state pickle persistence (gitignored).
 
+## Guidance for AI coding agents
+
+- **Start mode**: `default_agent` is `plan` — create a short plan before editing.
+- **Shell safety**: `bash` permission is `ask` — always request permission before running terminal commands.
+- **How to run**: Use `uv run reflex run` for development; `uv run reflex run --prod` for production build. Use the preexisting `.venv/`.
+- **Dependency management**: Run `uv sync` only when `pyproject.toml` or `uv.lock` change.
+- **Database**: The app requires Oracle access (host `VDW-FidelidadAIX:1521` by default). Use `ORACLE_USER`, `ORACLE_PASSWORD`, `ORACLE_DSN` to override credentials. `.env` is gitignored — do not commit secrets.
+- **Entrypoint**: Primary app module is [ConsultaACE/ConsultaACE.py](ConsultaACE/ConsultaACE.py). Do not rely on `main.py`.
+- **Artifacts**: Ignore `.web/` and `.states/` — they are generated and persisted by Reflex.
+- **Testing & CI**: There are no tests, linters, or CI configured. Make minimal, focused changes and suggest adding tests where appropriate.
+- **Common pitfalls**: No SQLite fallback; the app will fail without Oracle network access. `uv` is the only package manager available.
+
+## Important docs (link, do not duplicate)
+
+- `database_schema.md` — canonical DB schema; reference, do not copy.
+- `STYLE_GUIDE.md` — coding/convention guidance for this repo.
+- `rxconfig.py` — Reflex configuration and plugins.
+
+## OpenCode / opencode.json notes
+
+- `default_agent: "plan"` — agents should produce a short plan before edits.
+- `bash: "ask"` — ask before running shell commands.
+
 ## OpenCode config (`opencode.json`)
 
 - `database_schema.md` and `STYLE_GUIDE.md` are loaded as instructions — always present, do not duplicate.
